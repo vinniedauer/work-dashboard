@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicosResworx/tauri/refs/heads/dev/.schema/config.schema.json",
+  "productName": "Work Dashboard",
+  "version": "0.1.0",
+  "identifier": "com.work-dashboard.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Work Dashboard",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 700
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "resources": ["resources/calendar_helper"]
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    }
+  }
+}

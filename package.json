@@ -1,0 +1,36 @@
+{
+  "name": "work-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build:swift": "mkdir -p src-tauri/resources && swiftc src-tauri/calendar_helper.swift -o src-tauri/resources/calendar_helper",
+    "build": "npm run build:swift && tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-http": "^2",
+    "@tauri-apps/plugin-opener": "^2.5.3",
+    "@tauri-apps/plugin-shell": "^2",
+    "@tauri-apps/plugin-store": "^2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-resizable-panels": "^4.10.0",
+    "react-router-dom": "^7"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5"
+  }
+}
