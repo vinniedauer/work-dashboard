@@ -2,8 +2,6 @@
 
 A personal macOS desktop dashboard built with [Tauri](https://tauri.app/) + React. Pulls live data from Jira, GitHub, Slack, and Outlook into a single glanceable window so you always know what to work on next.
 
-![Dashboard panels: Focus Bar, My Work, My Meetings, Team Pulse, Deployment Tracker, Replatform Monitor](https://placehold.co/900x500?text=Work+Dashboard)
-
 ---
 
 ## Features
