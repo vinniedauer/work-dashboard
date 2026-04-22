@@ -5,15 +5,19 @@ import { useAutoRefresh } from "../../hooks/useAutoRefresh";
 import type { DeploymentEvent, JiraFixVersion } from "../../types";
 import {
   useMyTickets,
+  useMyDoneTickets,
   useTeamBugs,
   useFixVersions,
   useReplatformBoard,
+  useTicketsByKeys,
 } from "../../hooks/useJira";
 import { useMyPullRequests, useTeamPullRequests, useBranchVersions } from "../../hooks/useGithub";
 import { useChannelMessages, useSituationsToMonitor, useWaitingOnYou } from "../../hooks/useSlack";
 import { useTodayEvents, useNextBusinessDayEvents } from "../../hooks/useOutlook";
 
+import { useNextAction } from "../../hooks/useNextAction";
 import Header from "./Header";
+import FocusBar from "../panels/FocusBar";
 import MyWork from "../panels/MyWork";
 import MyMeetings from "../panels/MyMeetings";
 import TeamPulse from "../panels/TeamPulse";
@@ -52,8 +56,50 @@ export default function Dashboard() {
   const fixVersions = useFixVersions(config);
   const deploySlack = useChannelMessages(config, config.slack.deployChannelId);
 
+  // Filter highsmithcodes PRs by linked Jira ticket status
+  const highsmithJiraKeys = useMemo(() => {
+    const prs = (teamPRs.data ?? []).filter(
+      (pr) => pr.author?.toLowerCase() === "highsmithcodes" && !pr.isDraft
+    );
+    const keys: string[] = [];
+    for (const pr of prs) {
+      const m = `${pr.headRef} ${pr.title}`.match(/\b([A-Z]+-\d+)\b/);
+      if (m) keys.push(m[1]);
+    }
+    return keys;
+  }, [teamPRs.data]);
+
+  const highsmithTickets = useTicketsByKeys(config, highsmithJiraKeys);
+
+  const filteredTeamPRs = useMemo(() => {
+    const prs = teamPRs.data ?? [];
+    const tickets = highsmithTickets.data;
+    if (!tickets) return prs;
+    const readyStatuses = new Set(["ready for review", "in code review"]);
+    const statusMap = new Map(tickets.map((t) => [t.key, t.status.toLowerCase()]));
+    return prs.filter((pr) => {
+      if (pr.author?.toLowerCase() !== "highsmithcodes" || pr.isDraft) return true;
+      const m = `${pr.headRef} ${pr.title}`.match(/\b([A-Z]+-\d+)\b/);
+      if (!m) return true;
+      const status = statusMap.get(m[1]);
+      return !status || readyStatuses.has(status);
+    });
+  }, [teamPRs.data, highsmithTickets.data]);
+
   // Replatform Monitor
   const replatformBoard = useReplatformBoard(config);
+  const myDoneTickets = useMyDoneTickets(config);
+
+  const nextAction = useNextAction({
+    todayEvents: todayEvents.data ?? [],
+    boardItems: replatformBoard.data ?? [],
+    teamPRs: filteredTeamPRs,
+    myPRs: myPRs.data ?? [],
+    situations: situationsToMonitor.data ?? [],
+    myTickets: myTickets.data ?? [],
+    myDoneTickets: myDoneTickets.data ?? [],
+    config,
+  });
 
   const deploymentEvents = useMemo(
     () => deriveDeploymentEvents(fixVersions.data ?? [], config.jira.baseUrl),
@@ -68,8 +114,10 @@ export default function Dashboard() {
         isRefreshing={isRefreshing}
       />
 
+      <FocusBar action={nextAction} />
+
       {/* Resizable 2×2 layout */}
-      <main className="flex-1 min-h-0 p-4 overflow-hidden">
+      <main className="flex-1 min-h-0 px-4 pb-4 pt-4 overflow-hidden">
         <PanelGroup orientation="horizontal" className="h-full">
 
           {/* Left column */}
@@ -132,7 +180,7 @@ export default function Dashboard() {
               <Panel defaultSize={50} minSize={20} className="min-h-0">
                 <div className="h-full pb-2 pl-2">
                   <TeamPulse
-                    reviewPRs={teamPRs.data ?? []}
+                    reviewPRs={filteredTeamPRs}
                     bugs={teamBugs.data ?? []}
                     waitingOnYou={waitingOnYou.data ?? []}
                     situationsToMonitor={situationsToMonitor.data ?? []}

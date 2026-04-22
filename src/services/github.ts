@@ -16,6 +16,9 @@ function authHeaders(token: string): Record<string, string> {
 }
 
 function mapPR(raw: any): PullRequest {
+  const requestedReviewers: string[] = (raw.requested_reviewers ?? []).map(
+    (r: any) => r.login ?? ""
+  );
   return {
     id: raw.id,
     number: raw.number,
@@ -26,12 +29,31 @@ function mapPR(raw: any): PullRequest {
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
     isDraft: raw.draft ?? false,
-    reviewDecision: null, // REST API doesn't provide this; populated via reviews
-    reviews: [],
-    checksStatus: null, // populated separately if needed
+    reviewDecision: requestedReviewers.length > 0 ? "REVIEW_REQUIRED" : null,
+    reviews: requestedReviewers.map((login) => ({
+      author: login,
+      state: "PENDING" as const,
+      submittedAt: "",
+    })),
+    checksStatus: null,
     headRef: raw.head?.ref ?? "",
     baseRef: raw.base?.ref ?? "",
   };
+}
+
+function deriveReviewDecision(reviews: PullRequestReview[]): string | null {
+  if (reviews.length === 0) return null;
+  // Keep only the latest review per author.
+  const latest = new Map<string, PullRequestReview>();
+  for (const r of reviews) {
+    if (r.state === "PENDING" || r.state === "COMMENTED") continue;
+    const prev = latest.get(r.author);
+    if (!prev || r.submittedAt > prev.submittedAt) latest.set(r.author, r);
+  }
+  const decisions = [...latest.values()].map((r) => r.state);
+  if (decisions.includes("CHANGES_REQUESTED")) return "CHANGES_REQUESTED";
+  if (decisions.includes("APPROVED")) return "APPROVED";
+  return null;
 }
 
 function mapReview(raw: any): PullRequestReview {
@@ -84,7 +106,18 @@ export async function fetchMyPullRequests(
   }
 
   const data: any[] = await resp.json();
-  return data.filter((pr) => pr.user?.login === username).map(mapPR);
+  const myPRs = data.filter((pr) => pr.user?.login === username).map(mapPR);
+
+  // Enrich each PR with its actual review decision.
+  await Promise.all(
+    myPRs.map(async (pr) => {
+      const reviews = await fetchPRReviews(config, pr.number);
+      pr.reviews = reviews;
+      pr.reviewDecision = deriveReviewDecision(reviews);
+    })
+  );
+
+  return myPRs;
 }
 
 /**

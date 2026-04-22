@@ -28,6 +28,10 @@ function baseUrl(config: AppConfig["jira"]): string {
 /** Map raw Jira REST issue JSON to our local JiraTicket type. */
 function mapIssue(raw: any, jiraBase: string): JiraTicket {
   const fields = raw.fields ?? {};
+  // story_points is the Simplified Field Scheme name; customfield_10016 is the
+  // legacy custom field used by many Jira Cloud instances.
+  const storyPoints =
+    fields.story_points ?? fields.customfield_10016 ?? null;
   return {
     key: raw.key,
     summary: fields.summary ?? "",
@@ -40,6 +44,7 @@ function mapIssue(raw: any, jiraBase: string): JiraTicket {
     issueType: fields.issuetype?.name ?? "",
     updated: fields.updated ?? "",
     url: `${jiraBase}/browse/${raw.key}`,
+    storyPoints: typeof storyPoints === "number" ? storyPoints : null,
   };
 }
 
@@ -88,6 +93,8 @@ const ISSUE_FIELDS = [
   "project",
   "issuetype",
   "updated",
+  "story_points",
+  "customfield_10016",
 ];
 
 // ---------------------------------------------------------------------------
@@ -162,6 +169,39 @@ export async function fetchMyTickets(
 
   const results = await Promise.all(queries);
   return results.flat();
+}
+
+/**
+ * Done tickets assigned to the current user in the current sprint, for the EA
+ * and ER projects. Used to tally completed story points per board.
+ */
+export async function fetchMyDoneTicketsSprint(
+  config: AppConfig
+): Promise<JiraTicket[]> {
+  const { email, ecomProjectKey, erProjectKey } = config.jira;
+  const assignee = email ? `"${email}"` : "currentUser()";
+  const queries: Promise<JiraTicket[]>[] = [];
+
+  for (const key of [ecomProjectKey, erProjectKey].filter(Boolean)) {
+    const jqlSprint = `project = "${key}" AND sprint in openSprints() AND assignee = ${assignee} AND statusCategory = Done ORDER BY updated DESC`;
+    const jqlFallback = `project = "${key}" AND assignee = ${assignee} AND statusCategory = Done ORDER BY updated DESC`;
+    queries.push(searchWithSprintFallback(config.jira, jqlSprint, jqlFallback));
+  }
+
+  return (await Promise.all(queries)).flat();
+}
+
+/**
+ * Fetch specific tickets by key — used to check the status of tickets linked
+ * to PRs without fetching the full sprint board.
+ */
+export async function fetchTicketsByKeys(
+  config: AppConfig,
+  keys: string[]
+): Promise<JiraTicket[]> {
+  if (keys.length === 0) return [];
+  const jql = `key in (${keys.map((k) => `"${k}"`).join(",")})`;
+  return searchIssues(config.jira, jql, ISSUE_FIELDS, keys.length);
 }
 
 /**

@@ -23,6 +23,20 @@ export function useMyTickets(config: AppConfig) {
   });
 }
 
+export function useMyDoneTickets(config: AppConfig) {
+  return useQuery<JiraTicket[]>({
+    queryKey: [
+      "jira",
+      "myDoneTickets",
+      config.jira.email,
+      config.jira.ecomProjectKey,
+      config.jira.erProjectKey,
+    ],
+    queryFn: () => jira.fetchMyDoneTicketsSprint(config),
+    enabled: !!config.jira.apiToken,
+  });
+}
+
 export function useTeamBugs(config: AppConfig) {
   return useQuery<JiraTicket[]>({
     queryKey: ["jira", "teamBugs"],
@@ -52,6 +66,14 @@ export function useReplatformBoard(config: AppConfig) {
     queryKey: ["jira", "replatformBoard"],
     queryFn: () => jira.fetchReplatformBoard(config),
     enabled: !!config.jira.apiToken,
+  });
+}
+
+export function useTicketsByKeys(config: AppConfig, keys: string[]) {
+  return useQuery<JiraTicket[]>({
+    queryKey: ["jira", "ticketsByKeys", keys.slice().sort().join(",")],
+    queryFn: () => jira.fetchTicketsByKeys(config, keys),
+    enabled: !!config.jira.apiToken && keys.length > 0,
   });
 }
 

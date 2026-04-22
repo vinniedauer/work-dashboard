@@ -12,6 +12,7 @@ export interface JiraTicket {
   issueType: string;
   updated: string;
   url: string;
+  storyPoints: number | null;
 }
 
 export interface JiraComment {
