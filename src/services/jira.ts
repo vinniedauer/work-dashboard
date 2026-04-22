@@ -25,13 +25,44 @@ function baseUrl(config: AppConfig["jira"]): string {
   return config.baseUrl.replace(/\/+$/, "");
 }
 
+// Cached reviewers field ID — fetched once per session.
+let reviewersFieldId: string | null = null;
+
+export async function fetchReviewersFieldId(
+  config: AppConfig
+): Promise<string | null> {
+  if (reviewersFieldId !== undefined && reviewersFieldId !== null)
+    return reviewersFieldId;
+  try {
+    const resp = await fetch(`${baseUrl(config.jira)}/rest/api/3/field`, {
+      method: "GET",
+      headers: authHeaders(config.jira),
+    });
+    if (!resp.ok) return null;
+    const fields: any[] = await resp.json();
+    const match = fields.find(
+      (f) => f.name?.toLowerCase() === "reviewers" && f.schema?.type !== "string"
+    );
+    reviewersFieldId = match?.id ?? null;
+  } catch {
+    reviewersFieldId = null;
+  }
+  return reviewersFieldId;
+}
+
 /** Map raw Jira REST issue JSON to our local JiraTicket type. */
-function mapIssue(raw: any, jiraBase: string): JiraTicket {
+function mapIssue(raw: any, jiraBase: string, rvFieldId?: string | null): JiraTicket {
   const fields = raw.fields ?? {};
-  // story_points is the Simplified Field Scheme name; customfield_10016 is the
-  // legacy custom field used by many Jira Cloud instances.
   const storyPoints =
     fields.story_points ?? fields.customfield_10016 ?? null;
+
+  let reviewers: string[] = [];
+  if (rvFieldId && Array.isArray(fields[rvFieldId])) {
+    reviewers = (fields[rvFieldId] as any[])
+      .map((u) => (u.emailAddress ?? u.displayName ?? "").toLowerCase())
+      .filter(Boolean);
+  }
+
   return {
     key: raw.key,
     summary: fields.summary ?? "",
@@ -45,6 +76,7 @@ function mapIssue(raw: any, jiraBase: string): JiraTicket {
     updated: fields.updated ?? "",
     url: `${jiraBase}/browse/${raw.key}`,
     storyPoints: typeof storyPoints === "number" ? storyPoints : null,
+    reviewers,
   };
 }
 
@@ -61,14 +93,11 @@ async function searchIssues(
   config: AppConfig["jira"],
   jql: string,
   fields: string[],
-  maxResults = 100
+  maxResults = 100,
+  rvFieldId?: string | null
 ): Promise<JiraTicket[]> {
   const url = `${baseUrl(config)}/rest/api/3/search/jql`;
-  const body = JSON.stringify({
-    jql,
-    maxResults,
-    fields,
-  });
+  const body = JSON.stringify({ jql, maxResults, fields });
 
   const resp = await fetch(url, {
     method: "POST",
@@ -82,7 +111,7 @@ async function searchIssues(
 
   const data = await resp.json();
   const base = baseUrl(config);
-  return (data.issues ?? []).map((i: any) => mapIssue(i, base));
+  return (data.issues ?? []).map((i: any) => mapIssue(i, base, rvFieldId));
 }
 
 const ISSUE_FIELDS = [
@@ -200,8 +229,10 @@ export async function fetchTicketsByKeys(
   keys: string[]
 ): Promise<JiraTicket[]> {
   if (keys.length === 0) return [];
+  const rvFieldId = await fetchReviewersFieldId(config);
+  const fields = rvFieldId ? [...ISSUE_FIELDS, rvFieldId] : ISSUE_FIELDS;
   const jql = `key in (${keys.map((k) => `"${k}"`).join(",")})`;
-  return searchIssues(config.jira, jql, ISSUE_FIELDS, keys.length);
+  return searchIssues(config.jira, jql, fields, keys.length, rvFieldId);
 }
 
 /**

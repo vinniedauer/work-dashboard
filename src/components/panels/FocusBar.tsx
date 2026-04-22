@@ -20,9 +20,10 @@ const categoryIcons: Record<string, string> = {
 
 interface FocusBarProps {
   action: NextAction;
+  onDismissMeeting: (id: string) => void;
 }
 
-export default function FocusBar({ action }: FocusBarProps) {
+export default function FocusBar({ action, onDismissMeeting }: FocusBarProps) {
   const colors = categoryColors[action.category] ?? categoryColors.idle;
   const icon = categoryIcons[action.category] ?? "";
 
@@ -34,7 +35,7 @@ export default function FocusBar({ action }: FocusBarProps) {
   );
 
   return (
-    <div className={`mx-4 mt-4 rounded-xl border px-6 py-3 text-lg font-medium ${colors}`}>
+    <div className={`mx-4 mt-4 rounded-xl border px-6 py-3 text-lg font-medium flex items-center justify-between ${colors}`}>
       {action.url ? (
         <a
           href={action.url}
@@ -46,6 +47,15 @@ export default function FocusBar({ action }: FocusBarProps) {
         </a>
       ) : (
         inner
+      )}
+
+      {action.category === "meeting" && action.meetingId && (
+        <button
+          onClick={() => onDismissMeeting(action.meetingId!)}
+          className="ml-6 shrink-0 text-sm font-semibold px-3 py-1 rounded-lg bg-red-800 hover:bg-red-700 text-red-100 border border-red-600 transition-colors"
+        >
+          Meeting Ended
+        </button>
       )}
     </div>
   );

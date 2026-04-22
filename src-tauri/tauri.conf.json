@@ -24,7 +24,14 @@
     }
   },
   "bundle": {
-    "resources": ["resources/calendar_helper"]
+    "resources": ["resources/calendar_helper"],
+    "icon": [
+      "icons/icon.icns",
+      "icons/icon_32x32.png",
+      "icons/icon_128x128.png",
+      "icons/icon_256x256.png",
+      "icons/icon_512x512.png"
+    ]
   },
   "plugins": {
     "shell": {

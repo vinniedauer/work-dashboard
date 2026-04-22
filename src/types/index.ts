@@ -13,6 +13,7 @@ export interface JiraTicket {
   updated: string;
   url: string;
   storyPoints: number | null;
+  reviewers: string[];
 }
 
 export interface JiraComment {

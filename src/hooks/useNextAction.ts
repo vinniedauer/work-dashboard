@@ -21,6 +21,7 @@ export interface NextAction {
   message: string;
   url?: string;
   urgency: "high" | "normal" | "low";
+  meetingId?: string;
 }
 
 const PRIORITY_RANK: Record<string, number> = {
@@ -58,8 +59,10 @@ function compute(
   situations: SlackMessage[],
   myTickets: JiraTicket[],
   myDoneTickets: JiraTicket[],
-  config: AppConfig
+  config: AppConfig,
+  dismissedMeetingIds: string[]
 ): NextAction {
+  const dismissed = new Set(dismissedMeetingIds);
   const ecomKey = config.jira.ecomProjectKey.toUpperCase();
   const erKey = config.jira.erProjectKey.toUpperCase();
 
@@ -84,6 +87,7 @@ function compute(
   const currentMeeting = todayEvents.find(
     (e) =>
       !e.isAllDay &&
+      !dismissed.has(e.id) &&
       new Date(e.start).getTime() <= now &&
       new Date(e.end).getTime() > now
   );
@@ -93,6 +97,7 @@ function compute(
       message: `You're in "${currentMeeting.subject}" right now — focus up.`,
       url: currentMeeting.joinUrl,
       urgency: "high",
+      meetingId: currentMeeting.id,
     };
   }
 
@@ -267,6 +272,7 @@ interface UseNextActionInput {
   myTickets: JiraTicket[];
   myDoneTickets: JiraTicket[];
   config: AppConfig;
+  dismissedMeetingIds: string[];
 }
 
 export function useNextAction(input: UseNextActionInput): NextAction {
@@ -280,7 +286,8 @@ export function useNextAction(input: UseNextActionInput): NextAction {
         input.situations,
         input.myTickets,
         input.myDoneTickets,
-        input.config
+        input.config,
+        input.dismissedMeetingIds
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -291,6 +298,7 @@ export function useNextAction(input: UseNextActionInput): NextAction {
       input.situations,
       input.myTickets,
       input.myDoneTickets,
+      input.dismissedMeetingIds,
     ]
   );
 }

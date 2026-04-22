@@ -140,7 +140,18 @@ export async function fetchTeamPullRequests(
   }
 
   const data: any[] = await resp.json();
-  return data.map(mapPR);
+  const prs = data.map(mapPR);
+
+  await Promise.all(
+    prs.map(async (pr) => {
+      const reviews = await fetchPRReviews(config, pr.number);
+      pr.reviews = reviews;
+      const decision = deriveReviewDecision(reviews);
+      if (decision) pr.reviewDecision = decision;
+    })
+  );
+
+  return prs;
 }
 
 /**

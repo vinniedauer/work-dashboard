@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { useConfig } from "../../hooks/useConfig";
 import { useAutoRefresh } from "../../hooks/useAutoRefresh";
@@ -56,39 +56,53 @@ export default function Dashboard() {
   const fixVersions = useFixVersions(config);
   const deploySlack = useChannelMessages(config, config.slack.deployChannelId);
 
-  // Filter highsmithcodes PRs by linked Jira ticket status
-  const highsmithJiraKeys = useMemo(() => {
-    const prs = (teamPRs.data ?? []).filter(
-      (pr) => pr.author?.toLowerCase() === "highsmithcodes" && !pr.isDraft
-    );
+  // Extract Jira keys from all team PRs for status filtering
+  const teamPRJiraKeys = useMemo(() => {
     const keys: string[] = [];
-    for (const pr of prs) {
+    for (const pr of teamPRs.data ?? []) {
       const m = `${pr.headRef} ${pr.title}`.match(/\b([A-Z]+-\d+)\b/);
       if (m) keys.push(m[1]);
     }
-    return keys;
+    return [...new Set(keys)];
   }, [teamPRs.data]);
 
-  const highsmithTickets = useTicketsByKeys(config, highsmithJiraKeys);
+  const teamPRTickets = useTicketsByKeys(config, teamPRJiraKeys);
 
   const filteredTeamPRs = useMemo(() => {
     const prs = teamPRs.data ?? [];
-    const tickets = highsmithTickets.data;
-    if (!tickets) return prs;
-    const readyStatuses = new Set(["ready for review", "in code review"]);
-    const statusMap = new Map(tickets.map((t) => [t.key, t.status.toLowerCase()]));
+    if (teamPRTickets.isLoading) return prs.filter((pr) => !pr.isDraft);
+    const ticketMap = new Map(
+      (teamPRTickets.data ?? []).map((t) => [t.key, t])
+    );
+    const ecomKey = config.jira.ecomProjectKey.toUpperCase();
+    const myEmail = config.jira.email.toLowerCase();
     return prs.filter((pr) => {
-      if (pr.author?.toLowerCase() !== "highsmithcodes" || pr.isDraft) return true;
+      if (pr.isDraft) return false;
+      if (pr.reviewDecision === "APPROVED") return false;
       const m = `${pr.headRef} ${pr.title}`.match(/\b([A-Z]+-\d+)\b/);
       if (!m) return true;
-      const status = statusMap.get(m[1]);
-      return !status || readyStatuses.has(status);
+      const ticket = ticketMap.get(m[1]);
+      if (!ticket) return true;
+      const status = ticket.status.toLowerCase();
+      if (ticket.projectKey.toUpperCase() === ecomKey) {
+        if (status === "ready for review") return true;
+        if (status === "in code review") {
+          return ticket.reviewers.some((r) => r === myEmail);
+        }
+        return false;
+      }
+      return status !== "in progress";
     });
-  }, [teamPRs.data, highsmithTickets.data]);
+  }, [teamPRs.data, teamPRTickets.data, teamPRTickets.isLoading, config.jira.ecomProjectKey, config.jira.email]);
 
   // Replatform Monitor
   const replatformBoard = useReplatformBoard(config);
   const myDoneTickets = useMyDoneTickets(config);
+
+  const [dismissedMeetingIds, setDismissedMeetingIds] = useState<string[]>([]);
+  const dismissMeeting = useCallback((id: string) => {
+    setDismissedMeetingIds((prev) => [...prev, id]);
+  }, []);
 
   const nextAction = useNextAction({
     todayEvents: todayEvents.data ?? [],
@@ -99,6 +113,7 @@ export default function Dashboard() {
     myTickets: myTickets.data ?? [],
     myDoneTickets: myDoneTickets.data ?? [],
     config,
+    dismissedMeetingIds,
   });
 
   const deploymentEvents = useMemo(
@@ -114,7 +129,7 @@ export default function Dashboard() {
         isRefreshing={isRefreshing}
       />
 
-      <FocusBar action={nextAction} />
+      <FocusBar action={nextAction} onDismissMeeting={dismissMeeting} />
 
       {/* Resizable 2×2 layout */}
       <main className="flex-1 min-h-0 px-4 pb-4 pt-4 overflow-hidden">
